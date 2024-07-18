@@ -1,98 +1,113 @@
+import { NgFor, NgIf } from '@angular/common';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterOutlet } from '@angular/router';
 
+export interface CronExpression {
+  minute: string;
+  hour: string;
+  dayOfMonth: string;
+  month: string;
+  dayOfWeek: string;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, FormsModule],
+  imports: [RouterOutlet, FormsModule, NgIf, NgFor],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  minute: string = '0';
-  hour: string = '';
-  dayOfMonth: string = '';
-  month: string = '';
-  dayOfWeek: string = '';
-  cron: string = '';
+  cronExpression: string = '';
+  description: string = '';
+  nextExecutions: string[] = [];
 
-  cronDescription: string = '';
+  parseCronExpression(expression: string): CronExpression {
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = expression.split(' ');
+    return { minute, hour, dayOfMonth, month, dayOfWeek };
+  }
 
-  errorMessages: string[] = [];
+  generateDescription(cron: CronExpression): string {
+    const minuteDesc = this.getPartDescription(cron.minute, 'minute');
+    const hourDesc = this.getPartDescription(cron.hour, 'hour');
+    const dayOfMonthDesc = this.getPartDescription(cron.dayOfMonth, 'day of the month');
+    const monthDesc = this.getPartDescription(cron.month, 'month');
+    const dayOfWeekDesc = this.getPartDescription(cron.dayOfWeek, 'day of the week');
 
-  months = [
-    'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
-  ];
+    return `At ${minuteDesc} past ${hourDesc}, ${dayOfMonthDesc}, ${monthDesc}, ${dayOfWeekDesc}.`;
+  }
 
-  weekdays = [
-    'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
-    'quinta-feira', 'sexta-feira', 'sábado'
-  ];
+  getPartDescription(cronPart: string, unit: string): string {
+    if (cronPart === '*') return `every ${unit}`;
 
-  updateDescription() {
-    this.errorMessages = [];
-    let isValid = true;
-
-    const hour = this.hour ? String(this.hour).padStart(2, '0') : '*';
-    const minute = this.minute ? String(this.minute).padStart(2, '0') : '*';
-    const dayOfMonth = this.dayOfMonth ? this.dayOfMonth : '*';
-    const month = this.month ? this.month : '*';
-    const dayOfWeek = this.dayOfWeek ? this.dayOfWeek : '*';
-    const cronHour = this.hour ? this.hour : '*';
-    const cronMinute = this.minute ? this.minute : '*';
-
-    if (this.hour && (parseInt(this.hour, 10) < 0 || parseInt(this.hour, 10) > 23)) {
-      this.errorMessages.push('Hora deve ser entre 0 e 23.');
-      isValid = false;
-    }
-    if (this.dayOfMonth && (parseInt(this.dayOfMonth, 10) < 1 || parseInt(this.dayOfMonth, 10) > 30)) {
-      this.errorMessages.push('Dia do mês deve ser entre 1 e 30.');
-      isValid = false;
-    }
-    if (this.month && (parseInt(this.month, 10) < 1 || parseInt(this.month, 10) > 12)) {
-      this.errorMessages.push('Mês deve ser entre 1 e 12.');
-      isValid = false;
-    }
-    if (this.dayOfWeek && (parseInt(this.dayOfWeek, 10) < 0 || parseInt(this.dayOfWeek, 10) > 6)) {
-      this.errorMessages.push('Dia da semana deve ser entre 0 e 6.');
-      isValid = false;
-    }
-
-    if (isValid) {
-      this.cron = `${cronMinute} ${cronHour} ${dayOfMonth} ${month} ${dayOfWeek}`;
-
-      let description = '';
-      if (this.hour) {
-        description += `Às ${hour}:${minute}`;
+    if (cronPart.includes('/')) {
+      const [start, step] = cronPart.split('/');
+      if (start === '*') {
+        return `every ${step} ${unit}s`;
       }
-      if (this.dayOfMonth) {
-        description += ` do dia ${this.dayOfMonth}`;
-      }
-      if (this.month) {
-        const monthIndex = parseInt(this.month, 10) - 1;
-        if (monthIndex >= 0 && monthIndex < this.months.length) {
-          description += ` em ${this.months[monthIndex]}`;
-        }
-      }
-      if (this.dayOfWeek || this.dayOfWeek === '0') {
-        const dayIndex = parseInt(this.dayOfWeek, 10);
-        if (dayIndex >= 0 && dayIndex < this.weekdays.length) {
-          description += ` de ${this.weekdays[dayIndex]}`;
-        }
-      }
-
-      this.cronDescription = description;
-    } else {
-      this.cronDescription = '';
-      this.cron = '';
+      return `every ${step} ${unit}s starting at ${start}`;
     }
 
-    if(this.errorMessages.length > 0){
-      console.log(this.errorMessages)
+    if (cronPart.includes('-')) {
+      const [start, end] = cronPart.split('-');
+      return `from ${start} to ${end} ${unit}s`;
     }
-    
-    console.log(this.cron);
+
+    if (cronPart.includes(',')) {
+      return `${unit}s ${cronPart.replace(/,/g, ', ')}`;
+    }
+
+    return `${unit} ${cronPart}`;
+  }
+
+  generateNextExecutions(expression: CronExpression, count: number = 5): string[] {
+    const executions: string[] = [];
+    let currentDate = new Date();
+    let attempts = 0;  // Safeguard counter to prevent infinite loop
+
+    while (executions.length < count && attempts < 10000) {
+      attempts++;
+      currentDate.setMinutes(currentDate.getMinutes() + 1);
+      const matchesMinute = this.checkCronPart(currentDate.getMinutes(), expression.minute);
+      const matchesHour = this.checkCronPart(currentDate.getHours(), expression.hour);
+      const matchesDayOfMonth = this.checkCronPart(currentDate.getDate(), expression.dayOfMonth);
+      const matchesMonth = this.checkCronPart(currentDate.getMonth() + 1, expression.month);
+      const matchesDayOfWeek = this.checkCronPart(currentDate.getDay(), expression.dayOfWeek);
+
+      if (matchesMinute && matchesHour && matchesDayOfMonth && matchesMonth && matchesDayOfWeek) {
+        executions.push(currentDate.toString());
+      }
+    }
+
+    return executions.length > 0 ? executions : ['No valid execution times found within reasonable attempts'];
+  }
+
+  checkCronPart(value: number, cronPart: string): boolean {
+    if (cronPart === '*') return true;
+
+    if (cronPart.includes('/')) {
+      const [start, step] = cronPart.split('/');
+      const stepValue = parseInt(step, 10);
+      const startValue = start === '*' ? 0 : parseInt(start, 10);
+      return value % stepValue === startValue % stepValue;
+    }
+
+    if (cronPart.includes('-')) {
+      const [start, end] = cronPart.split('-');
+      return value >= parseInt(start, 10) && value <= parseInt(end, 10);
+    }
+
+    if (cronPart.includes(',')) {
+      return cronPart.split(',').map(Number).includes(value);
+    }
+
+    return value === parseInt(cronPart, 10);
+  }
+
+  onCronChange() {
+    const cron = this.parseCronExpression(this.cronExpression);
+    this.description = this.generateDescription(cron);
+    this.nextExecutions = this.generateNextExecutions(cron);
   }
 }

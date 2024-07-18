@@ -1,26 +1,12 @@
 <div>
-  <h2>{{ cronDescription }}</h2>
-  <form (ngSubmit)="updateDescription()">
-    <label>
-      Minuto:
-      <input type="number" [(ngModel)]="minute" name="minute" required>
-    </label>
-    <label>
-      Hora:
-      <input type="number" [(ngModel)]="hour" name="hour" required>
-    </label>
-    <label>
-      Dia do Mês:
-      <input type="number" [(ngModel)]="dayOfMonth" name="dayOfMonth">
-    </label>
-    <label>
-      Mês:
-      <input type="number" [(ngModel)]="month" name="month">
-    </label>
-    <label>
-      Dia da Semana:
-      <input type="number" [(ngModel)]="dayOfWeek" name="dayOfWeek">
-    </label>
-    <button type="submit">Atualizar</button>
-  </form>
+  <label for="cron">Cron Expression:</label>
+  <input id="cron" [(ngModel)]="cronExpression" (ngModelChange)="onCronChange()" />
+
+  <h2>Description:</h2>
+  <p>{{ description }}</p>
+
+  <h2>Next 5 Executions:</h2>
+  <ul>
+    <li *ngFor="let execution of nextExecutions">{{ execution }}</li>
+  </ul>
 </div>
